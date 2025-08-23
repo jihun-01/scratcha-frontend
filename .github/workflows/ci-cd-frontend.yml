@@ -10,7 +10,7 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     env:
-      SERVICE_NAME: frontend
+      SERVICE_NAME: front
       REGISTRY: kc-sfacspace.kr-central-2.kcr.dev/team2-repo
       IMAGE_NAME: scratcha-frontend-test
 
@@ -48,22 +48,22 @@ jobs:
           docker tag $REGISTRY/$IMAGE_NAME:$IMAGE_TAG $REGISTRY/$IMAGE_NAME:latest
           docker push $REGISTRY/$IMAGE_NAME:latest
 
-      - name: Checkout infra-config Repo
+      - name: Checkout test Repo
         uses: actions/checkout@v4
         with:
-          repository: your-org/infra-config
+          repository: jihun-01/test
           token: ${{ secrets.REPO_B_TOKEN }}
-          path: infra-config
+          path: test
 
       - name: Update values.yaml
         run: |
-          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" infra-config/helm-charts/frontend/values.yaml
+          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" test/helm-charts/front-chart/values.yaml
 
       - name: Commit & Push changes
         run: |
-          cd infra-config
+          cd test
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add helm-charts/frontend/values.yaml
+          git add test/helm-charts/front-chart/values.yaml
           git commit -m "Update frontend image tag to ${IMAGE_TAG}"
           git push origin main
