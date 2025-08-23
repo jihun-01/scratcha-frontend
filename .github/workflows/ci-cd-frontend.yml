@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SERVICE_NAME: front
-      REGISTRY: kc-sfacspace.kr-central-2.kcr.dev/team2-repo
-      IMAGE_NAME: scratcha-frontend-test
+      REGISTRY: ${{ secrets.REGISTRY_URL }}
+      IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
 
     steps:
       - name: Checkout code
@@ -52,8 +52,8 @@ jobs:
       - name: Checkout test Repo
         uses: actions/checkout@v4
         with:
-          repository: jihun-01/test
-          token: ${{ secrets.REPO_B_TOKEN }}
+          repository: ${{ secrets.REPO_NAME }}
+          token: ${{ secrets.REPO_TOKEN }}
           path: test
 
       - name: Update values.yaml
