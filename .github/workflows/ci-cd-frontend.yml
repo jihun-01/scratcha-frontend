@@ -58,13 +58,13 @@ jobs:
 
       - name: Update values.yaml
         run: |
-          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" test/helm-charts/front-chart/values.yaml
+          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" test/helm-chart/front-chart/values.yaml
 
       - name: Commit & Push changes
         run: |
           cd test
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add test/helm-charts/front-chart/values.yaml
+          git add helm-chart/front-chart/values.yaml
           git commit -m "Update frontend image tag to ${IMAGE_TAG}"
           git push origin main
