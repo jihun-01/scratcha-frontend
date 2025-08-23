@@ -37,7 +37,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Kakao Cloud Registry
-        run: echo "${{ secrets.KCR_PASSWORD }}" | docker login kc-sfacspace.kr-central-2.kcr.dev -u ${{ secrets.KCR_USER }} --password-stdin
+        run: |
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login kc-sfacspace.kr-central-2.kcr.dev -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
         run: |
