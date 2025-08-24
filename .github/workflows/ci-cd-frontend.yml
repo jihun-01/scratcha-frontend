@@ -129,6 +129,12 @@ jobs:
           echo "KCR_REGISTRY_URL length: ${#KCR_REGISTRY_URL}"
           echo "KCR_IMAGE_NAME length: ${#KCR_IMAGE_NAME}"
           
+          # 추가 디버깅: 환경 변수 직접 확인
+          echo "env.REGISTRY: '${{ env.REGISTRY }}'"
+          echo "env.IMAGE_NAME: '${{ env.IMAGE_NAME }}'"
+          echo "env.REGISTRY length: ${#REGISTRY}"
+          echo "env.IMAGE_NAME length: ${#IMAGE_NAME}"
+          
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG .
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
           docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
