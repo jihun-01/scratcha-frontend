@@ -44,7 +44,7 @@ jobs:
 
       - name: Login to Kakao Cloud Registry
         run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login "${REGISTRY}" -u "${{ secrets.KCR_USER }}" --password-stdin
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
         run: |
@@ -61,10 +61,12 @@ jobs:
             exit 1
           fi
           
-          # 레지스트리 이름 형식 검증
-          if ! echo "$REGISTRY" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+$' > /dev/null; then
+          # 레지스트리 이름 형식 검증 (카카오 클라우드 레지스트리 포함)
+          if ! echo "$REGISTRY" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(\:[0-9]+)?$' > /dev/null; then
             echo "⚠️  REGISTRY format might be incorrect: $REGISTRY"
-            echo "Expected format: hostname:port (e.g., registry.example.com:5000)"
+            echo "Expected format: hostname or hostname:port (e.g., xxx.kakaocloud.com or registry.example.com:5000)"
+          else
+            echo "✅ REGISTRY format validation passed"
           fi
           
           # 이미지 이름 형식 검증
@@ -75,12 +77,12 @@ jobs:
           fi
           
           echo "✅ Registry and image name validation passed"
-          echo "FULL_IMAGE_NAME: $REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+          echo "FULL_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
           
-          docker build -t "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" .
-          docker push "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
-          docker tag  "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" "$REGISTRY/$IMAGE_NAME:latest"
-          docker push "$REGISTRY/$IMAGE_NAME:latest"
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Set up SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -100,10 +102,18 @@ jobs:
           # 로컬 셸의 $IMAGE_TAG (GITHUB_ENV로 주입됨)를 사용
           ssh -v -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USERNAME@$SSH_HOST" \
             "echo '${{ secrets.KCR_PASSWORD }}' | docker login '${{ secrets.KCR_REGISTRY_URL }}' -u '${{ secrets.KCR_USER }}' --password-stdin && \
+             echo 'Cleaning up existing containers and ports...' && \
              docker stop scratcha_frontend || true && \
              docker rm scratcha_frontend || true && \
-             docker pull '${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:$IMAGE_TAG' && \
-             docker run -d --name scratcha_frontend -p 80:80 '${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:$IMAGE_TAG'" 2>&1
+             docker container prune -f || true && \
+             echo 'Checking port 80 usage...' && \
+             sudo lsof -ti:80 | xargs sudo kill -9 || true && \
+             sleep 2 && \
+             echo 'Pulling new image...' && \
+             docker pull '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}' && \
+             echo 'Starting new container...' && \
+             docker run -d --name scratcha_frontend --restart=unless-stopped -p 80:80 '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}' && \
+             echo 'Deployment completed successfully!'" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
   build-and-deploy:
@@ -141,44 +151,46 @@ jobs:
 
       - name: Login to Kakao Cloud Registry
         run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login "${KCR_REGISTRY_URL}" -u "${{ secrets.KCR_USER }}" --password-stdin
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
         run: |
           IMAGE_TAG="$(date +%Y%m%d%H%M%S)-${{ github.sha }}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
-          # 비어있는지 체크 (시크릿은 마스킹되므로 값 그 자체를 echo 하지 않는 게 안전)
-          if [ -z "${KCR_REGISTRY_URL}" ]; then
+          # 시크릿 값 검증
+          if [ -z "${{ secrets.KCR_REGISTRY_URL }}" ]; then
             echo "❌ KCR_REGISTRY_URL is empty"
             exit 1
           fi
-          if [ -z "${KCR_IMAGE_NAME}" ]; then
+          if [ -z "${{ secrets.KCR_IMAGE_NAME }}" ]; then
             echo "❌ KCR_IMAGE_NAME is empty"
             exit 1
           fi
           
-          # 레지스트리 이름 형식 검증 (일반적인 도커 레지스트리 형식)
-          if ! echo "${KCR_REGISTRY_URL}" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+$' > /dev/null; then
-            echo "⚠️  KCR_REGISTRY_URL format might be incorrect: ${KCR_REGISTRY_URL}"
-            echo "Expected format: hostname:port (e.g., registry.example.com:5000)"
+          # 레지스트리 이름 형식 검증 (카카오 클라우드 레지스트리 포함)
+          if ! echo "${{ secrets.KCR_REGISTRY_URL }}" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(\:[0-9]+)?$' > /dev/null; then
+            echo "⚠️  KCR_REGISTRY_URL format might be incorrect: ${{ secrets.KCR_REGISTRY_URL }}"
+            echo "Expected format: hostname or hostname:port (e.g., xxx.kakaocloud.com or registry.example.com:5000)"
+          else
+            echo "✅ KCR_REGISTRY_URL format validation passed"
           fi
           
-          # 이미지 이름 형식 검증 (소문자, 숫자, 하이픈, 슬래시만 허용)
-          if ! echo "${KCR_IMAGE_NAME}" | grep -E '^[a-z0-9]+([a-z0-9._-]*[a-z0-9])*(/[a-z0-9]+([a-z0-9._-]*[a-z0-9])*)*$' > /dev/null; then
-            echo "❌ KCR_IMAGE_NAME contains invalid characters: ${KCR_IMAGE_NAME}"
+          # 이미지 이름 형식 검증
+          if ! echo "${{ secrets.KCR_IMAGE_NAME }}" | grep -E '^[a-z0-9]+([a-z0-9._-]*[a-z0-9])*(/[a-z0-9]+([a-z0-9._-]*[a-z0-9])*)*$' > /dev/null; then
+            echo "❌ KCR_IMAGE_NAME contains invalid characters: ${{ secrets.KCR_IMAGE_NAME }}"
             echo "Image names must be lowercase and contain only alphanumeric characters, periods, underscores, and hyphens"
             exit 1
           fi
 
           echo "✅ Secrets mapped to env detected"
           echo "Registry and image name validation passed"
-          echo "FULL_IMAGE_NAME: ${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
+          echo "FULL_IMAGE_NAME: ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG"
 
-          docker build -t "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" .
-          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
-          docker tag  "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
-          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
+          docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
 
       - name: Checkout test Repo
         uses: actions/checkout@v4
