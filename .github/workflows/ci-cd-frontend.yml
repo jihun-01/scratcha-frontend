@@ -11,11 +11,78 @@ on:
       - develop
 
 jobs:
-  build-and-deploy:
+  # develop 브랜치용 VM 배포 잡
+  deploy-to-vm:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
     env:
       SERVICE_NAME: front
-      REGISTRY: ${{ secrets.REGISTRY_URL }}
+      REGISTRY: ${{ secrets.KCR_REGISTRY_URL }}
+      IMAGE_NAME: ${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Build application
+        run: npm run build
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Kakao Cloud Registry
+        run: |
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
+
+      - name: Build & Push Docker Image
+        run: |
+          IMAGE_TAG=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
+          docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+          docker tag $REGISTRY/$IMAGE_NAME:$IMAGE_TAG $REGISTRY/$IMAGE_NAME:latest
+          docker push $REGISTRY/$IMAGE_NAME:latest
+
+      - name: Set up SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to Frontend VM via Bastion
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
+          FRONTEND_USERNAME: ${{ secrets.FRONTEND_USERNAME }}
+        run: |
+          set -x
+          mkdir -p ~/.ssh
+          ssh-keyscan -v -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
+          ssh-keyscan -v -H "$FRONTEND_HOST" >> ~/.ssh/known_hosts 2>&1
+
+          ssh -v -o StrictHostKeyChecking=yes \
+              -o ProxyCommand="ssh -v -W %h:%p ${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }} 2>&1" \
+              "${{ env.FRONTEND_USERNAME }}@${{ env.FRONTEND_HOST }}" \
+              "docker stop scratcha_frontend || true && docker rm scratcha_frontend || true && docker pull ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }} && docker run -d --name scratcha_frontend -p 80:80 ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }}" 2>&1
+
+  # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      SERVICE_NAME: front
       IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
 
     steps:
@@ -50,10 +117,10 @@ jobs:
         run: |
           IMAGE_TAG=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
-          docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-          docker tag $REGISTRY/$IMAGE_NAME:$IMAGE_TAG $REGISTRY/$IMAGE_NAME:latest
-          docker push $REGISTRY/$IMAGE_NAME:latest
+          docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:latest
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:latest
 
       - name: Checkout test Repo
         uses: actions/checkout@v4
