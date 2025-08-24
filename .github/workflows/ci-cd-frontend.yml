@@ -64,17 +64,15 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
-          FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
-          FRONTEND_USERNAME: ${{ secrets.FRONTEND_USERNAME }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
           set -x
           mkdir -p ~/.ssh
           ssh-keyscan -v -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
-          ssh-keyscan -v -H "$FRONTEND_HOST" >> ~/.ssh/known_hosts 2>&1
 
           ssh -v -o StrictHostKeyChecking=yes \
-              -o ProxyCommand="ssh -v -W %h:%p ${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }} 2>&1" \
-              "${{ env.FRONTEND_USERNAME }}@${{ env.FRONTEND_HOST }}" \
+              -o ProxyCommand="ssh -v -p $SSH_PORT -W %h:%p ${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }} 2>&1" \
+              "ubuntu@localhost" \
               "docker stop scratcha_frontend || true && docker rm scratcha_frontend || true && docker pull ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }} && docker run -d --name scratcha_frontend -p 80:80 ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }}" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
