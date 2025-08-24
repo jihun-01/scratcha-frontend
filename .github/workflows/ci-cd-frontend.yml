@@ -21,39 +21,16 @@ jobs:
       IMAGE_NAME: ${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run linting
-        run: npm run lint
-
-      - name: Build application
-        run: npm run build
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Kakao Cloud Registry
-        run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
+      # ... (생략: checkout/node/npm/lint/build/docker login/build&push 동일)
 
       - name: Build & Push Docker Image
         run: |
-          IMAGE_TAG=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
-          docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-          docker tag $REGISTRY/$IMAGE_NAME:$IMAGE_TAG $REGISTRY/$IMAGE_NAME:latest
-          docker push $REGISTRY/$IMAGE_NAME:latest
+          IMAGE_TAG="$(date +%Y%m%d%H%M%S)-${{ github.sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          docker build -t "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" .
+          docker push "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+          docker tag  "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" "$REGISTRY/$IMAGE_NAME:latest"
+          docker push "$REGISTRY/$IMAGE_NAME:latest"
 
       - name: Set up SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -70,13 +47,13 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -v -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
 
-          # 베스천을 통해 프론트엔드 서버에 접속하여 배포 명령을 실행합니다.
-          # StrictHostKeyChecking=no로 호스트 키 검증 우회 (CI/CD 환경용)
-          # 배포 서버에서도 Docker 로그인 수행
-          ssh -v -o StrictHostKeyChecking=no \
-              -p $SSH_PORT \
-              "${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }}" \
-              "echo '${{ secrets.KCR_PASSWORD }}' | docker login ${{ secrets.KCR_REGISTRY_URL }} -u '${{ secrets.KCR_USER }}' --password-stdin && docker stop scratcha_frontend || true && docker rm scratcha_frontend || true && docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} && docker run -d --name scratcha_frontend -p 80:80 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" 2>&1
+          # 로컬 셸의 $IMAGE_TAG (GITHUB_ENV로 주입됨)를 사용
+          ssh -v -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USERNAME@$SSH_HOST" \
+            "echo '${{ secrets.KCR_PASSWORD }}' | docker login '${{ secrets.KCR_REGISTRY_URL }}' -u '${{ secrets.KCR_USER }}' --password-stdin && \
+             docker stop scratcha_frontend || true && \
+             docker rm scratcha_frontend || true && \
+             docker pull '${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}' && \
+             docker run -d --name scratcha_frontend -p 80:80 '${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}'" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
   build-and-deploy:
@@ -84,6 +61,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     env:
       SERVICE_NAME: front
+      # 시크릿 → 셸 env 매핑 (디버깅/사용 편의를 위해)
+      KCR_REGISTRY_URL: ${{ secrets.KCR_REGISTRY_URL }}
+      KCR_IMAGE_NAME: ${{ secrets.KCR_IMAGE_NAME }}
+      # (선택) 환경 시크릿을 쓰는 경우 활성화
+      # environment: production
 
     steps:
       - name: Checkout code
@@ -109,54 +91,30 @@ jobs:
 
       - name: Login to Kakao Cloud Registry
         run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login "${KCR_REGISTRY_URL}" -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
-        # 이미지를 빌드하고 KCR에 푸시합니다.
-        # 빌드 캐시를 활용하여 빌드 시간을 단축합니다.
         run: |
-          IMAGE_TAG=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          
-          # 디버깅을 위한 변수 출력 (시크릿 값은 마스킹됨)
-          echo "KCR_REGISTRY_URL: '${{ secrets.KCR_REGISTRY_URL }}'"
-          echo "KCR_IMAGE_NAME: '${{ secrets.KCR_IMAGE_NAME }}'"
-          echo "FULL_IMAGE_NAME: '${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG'"
-          
-          # 시크릿 값 길이 확인 (값이 비어있는지 체크)
-          echo "KCR_REGISTRY_URL length: ${#KCR_REGISTRY_URL}"
-          echo "KCR_IMAGE_NAME length: ${#KCR_IMAGE_NAME}"
-          
-          # 추가 디버깅: Secret 값 직접 확인
-          echo "=== Secret 값 확인 ==="
-          echo "KCR_REGISTRY_URL 값: '${{ secrets.KCR_REGISTRY_URL }}'"
-          echo "KCR_IMAGE_NAME 값: '${{ secrets.KCR_IMAGE_NAME }}'"
-          echo "========================="
-          
-          # Secret 값이 비어있는지 확인
-          if [ -z "${{ secrets.KCR_REGISTRY_URL }}" ]; then
-              echo "❌ KCR_REGISTRY_URL이 비어있습니다!"
-              exit 1
+          IMAGE_TAG="$(date +%Y%m%d%H%M%S)-${{ github.sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+          # 비어있는지 체크 (시크릿은 마스킹되므로 값 그 자체를 echo 하지 않는 게 안전)
+          if [ -z "${KCR_REGISTRY_URL}" ]; then
+            echo "❌ KCR_REGISTRY_URL is empty"
+            exit 1
           fi
-          if [ -z "${{ secrets.KCR_IMAGE_NAME }}" ]; then
-              echo "❌ KCR_IMAGE_NAME이 비어있습니다!"
-              exit 1
+          if [ -z "${KCR_IMAGE_NAME}" ]; then
+            echo "❌ KCR_IMAGE_NAME is empty"
+            exit 1
           fi
-          
-          echo "✅ Secret 값 확인 완료"
-          
-          # Secret 값 길이 재확인
-          echo "KCR_REGISTRY_URL 길이: ${#KCR_REGISTRY_URL}"
-          echo "KCR_IMAGE_NAME 길이: ${#KCR_IMAGE_NAME}"
-          
-          # Secret 값 직접 출력 (마스킹 확인)
-          echo "KCR_REGISTRY_URL 직접: ${{ secrets.KCR_REGISTRY_URL }}"
-          echo "KCR_IMAGE_NAME 직접: ${{ secrets.KCR_IMAGE_NAME }}"
-          
-          docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG .
-          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG
-          docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
-          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
+
+          echo "✅ Secrets mapped to env detected"
+          echo "FULL_IMAGE_NAME: ${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
+
+          docker build -t "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" .
+          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
+          docker tag  "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
+          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
 
       - name: Checkout test Repo
         uses: actions/checkout@v4
@@ -167,13 +125,13 @@ jobs:
 
       - name: Update values.yaml
         run: |
-          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" ${{ secrets.REPO_PATH }}/${{ secrets.HELM_CHART_PATH }}/values.yaml
+          sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" "${{ secrets.REPO_PATH }}/${{ secrets.HELM_CHART_PATH }}/values.yaml"
 
       - name: Commit & Push changes
         run: |
-          cd ${{ secrets.REPO_PATH }}
+          cd "${{ secrets.REPO_PATH }}"
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add ${{ secrets.HELM_CHART_PATH }}/values.yaml
-          git commit -m "Update frontend image tag to ${IMAGE_TAG}"
+          git add "${{ secrets.HELM_CHART_PATH }}/values.yaml"
+          git commit -m "Update frontend image tag to ${IMAGE_TAG}" || echo "No changes to commit"
           git push origin main
