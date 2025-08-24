@@ -145,6 +145,10 @@ jobs:
           
           echo "✅ Secret 값 확인 완료"
           
+          # Secret 값 길이 재확인
+          echo "KCR_REGISTRY_URL 길이: ${#KCR_REGISTRY_URL}"
+          echo "KCR_IMAGE_NAME 길이: ${#KCR_IMAGE_NAME}"
+          
           docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG .
           docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG
           docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
