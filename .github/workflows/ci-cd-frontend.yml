@@ -79,27 +79,7 @@ jobs:
           echo "✅ Registry and image name validation passed"
           echo "FULL_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
           
-          # 추가 디버깅: 실제 값들의 상세 정보 출력
-          echo "=== DEBUGGING INFO ==="
-          echo "REGISTRY starts with: $(echo "${{ env.REGISTRY }}" | head -c 10)..."
-          echo "IMAGE_NAME starts with: $(echo "${{ env.IMAGE_NAME }}" | head -c 10)..."
-          echo "REGISTRY character count: $(echo -n "${{ env.REGISTRY }}" | wc -c)"
-          echo "IMAGE_NAME character count: $(echo -n "${{ env.IMAGE_NAME }}" | wc -c)"
-          echo "REGISTRY contains spaces: $(echo "${{ env.REGISTRY }}" | grep -q ' ' && echo 'YES' || echo 'NO')"
-          echo "IMAGE_NAME contains spaces: $(echo "${{ env.IMAGE_NAME }}" | grep -q ' ' && echo 'YES' || echo 'NO')"
-          echo "REGISTRY contains special chars: $(echo "${{ env.REGISTRY }}" | grep -q '[^a-zA-Z0-9.-:]' && echo 'YES' || echo 'NO')"
-          echo "IMAGE_NAME contains special chars: $(echo "${{ env.IMAGE_NAME }}" | grep -q '[^a-zA-Z0-9._/-]' && echo 'YES' || echo 'NO')"
-          echo "======================="
-          
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG .
-          
-          # Push 직전에 한번 더 확인
-          echo "=== FINAL CHECK BEFORE PUSH ==="
-          echo "About to push: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
-          echo "Docker images built:"
-          docker images | grep "${{ env.IMAGE_NAME }}" || echo "No matching images found"
-          echo "================================"
-          
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
           docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -122,10 +102,18 @@ jobs:
           # 로컬 셸의 $IMAGE_TAG (GITHUB_ENV로 주입됨)를 사용
           ssh -v -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USERNAME@$SSH_HOST" \
             "echo '${{ secrets.KCR_PASSWORD }}' | docker login '${{ secrets.KCR_REGISTRY_URL }}' -u '${{ secrets.KCR_USER }}' --password-stdin && \
+             echo 'Cleaning up existing containers and ports...' && \
              docker stop scratcha_frontend || true && \
              docker rm scratcha_frontend || true && \
+             docker container prune -f || true && \
+             echo 'Checking port 80 usage...' && \
+             sudo lsof -ti:80 | xargs sudo kill -9 || true && \
+             sleep 2 && \
+             echo 'Pulling new image...' && \
              docker pull '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}' && \
-             docker run -d --name scratcha_frontend -p 80:80 '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'" 2>&1
+             echo 'Starting new container...' && \
+             docker run -d --name scratcha_frontend --restart=unless-stopped -p 80:80 '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}' && \
+             echo 'Deployment completed successfully!'" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
   build-and-deploy:
