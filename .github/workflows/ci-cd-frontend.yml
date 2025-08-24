@@ -150,39 +150,39 @@ jobs:
           IMAGE_TAG="$(date +%Y%m%d%H%M%S)-${{ github.sha }}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
-          # 비어있는지 체크 (시크릿은 마스킹되므로 값 그 자체를 echo 하지 않는 게 안전)
-          if [ -z "${KCR_REGISTRY_URL}" ]; then
+          # 시크릿 값 검증
+          if [ -z "${{ secrets.KCR_REGISTRY_URL }}" ]; then
             echo "❌ KCR_REGISTRY_URL is empty"
             exit 1
           fi
-          if [ -z "${KCR_IMAGE_NAME}" ]; then
+          if [ -z "${{ secrets.KCR_IMAGE_NAME }}" ]; then
             echo "❌ KCR_IMAGE_NAME is empty"
             exit 1
           fi
           
           # 레지스트리 이름 형식 검증 (카카오 클라우드 레지스트리 포함)
-          if ! echo "${KCR_REGISTRY_URL}" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(\:[0-9]+)?$' > /dev/null; then
-            echo "⚠️  KCR_REGISTRY_URL format might be incorrect: ${KCR_REGISTRY_URL}"
+          if ! echo "${{ secrets.KCR_REGISTRY_URL }}" | grep -E '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(\:[0-9]+)?$' > /dev/null; then
+            echo "⚠️  KCR_REGISTRY_URL format might be incorrect: ${{ secrets.KCR_REGISTRY_URL }}"
             echo "Expected format: hostname or hostname:port (e.g., xxx.kakaocloud.com or registry.example.com:5000)"
           else
             echo "✅ KCR_REGISTRY_URL format validation passed"
           fi
           
-          # 이미지 이름 형식 검증 (소문자, 숫자, 하이픈, 슬래시만 허용)
-          if ! echo "${KCR_IMAGE_NAME}" | grep -E '^[a-z0-9]+([a-z0-9._-]*[a-z0-9])*(/[a-z0-9]+([a-z0-9._-]*[a-z0-9])*)*$' > /dev/null; then
-            echo "❌ KCR_IMAGE_NAME contains invalid characters: ${KCR_IMAGE_NAME}"
+          # 이미지 이름 형식 검증
+          if ! echo "${{ secrets.KCR_IMAGE_NAME }}" | grep -E '^[a-z0-9]+([a-z0-9._-]*[a-z0-9])*(/[a-z0-9]+([a-z0-9._-]*[a-z0-9])*)*$' > /dev/null; then
+            echo "❌ KCR_IMAGE_NAME contains invalid characters: ${{ secrets.KCR_IMAGE_NAME }}"
             echo "Image names must be lowercase and contain only alphanumeric characters, periods, underscores, and hyphens"
             exit 1
           fi
 
           echo "✅ Secrets mapped to env detected"
           echo "Registry and image name validation passed"
-          echo "FULL_IMAGE_NAME: ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG"
+          echo "FULL_IMAGE_NAME: ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG"
 
-          docker build -t ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG .
-          docker push ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG
-          docker tag ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:latest
-          docker push ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:latest
+          docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
+          docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
 
       - name: Checkout test Repo
         uses: actions/checkout@v4
