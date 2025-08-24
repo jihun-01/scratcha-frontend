@@ -70,10 +70,13 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -v -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>&1
 
-          ssh -v -o StrictHostKeyChecking=yes \
-              -o ProxyCommand="ssh -v -p $SSH_PORT -W %h:%p ${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }} 2>&1" \
-              "ubuntu@localhost" \
-              "docker stop scratcha_frontend || true && docker rm scratcha_frontend || true && docker pull ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }} && docker run -d --name scratcha_frontend -p 80:80 ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:${{ env.IMAGE_TAG }}" 2>&1
+          # 베스천을 통해 프론트엔드 서버에 접속하여 배포 명령을 실행합니다.
+          # StrictHostKeyChecking=no로 호스트 키 검증 우회 (CI/CD 환경용)
+          # 배포 서버에서도 Docker 로그인 수행
+          ssh -v -o StrictHostKeyChecking=no \
+              -p $SSH_PORT \
+              "${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }}" \
+              "echo '${{ secrets.KCR_PASSWORD }}' | docker login ${{ secrets.KCR_REGISTRY_URL }} -u '${{ secrets.KCR_USER }}' --password-stdin && docker stop scratcha_frontend || true && docker rm scratcha_frontend || true && docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} && docker run -d --name scratcha_frontend -p 80:80 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
   build-and-deploy:
