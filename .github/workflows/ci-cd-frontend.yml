@@ -133,6 +133,16 @@ jobs:
           echo "KCR_IMAGE_NAME 값: '${{ secrets.KCR_IMAGE_NAME }}'"
           echo "========================="
           
+          # Secret 값이 비어있는지 확인
+          if [ -z "${{ secrets.KCR_REGISTRY_URL }}" ]; then
+              echo "❌ KCR_REGISTRY_URL이 비어있습니다!"
+              exit 1
+          fi
+          if [ -z "${{ secrets.KCR_IMAGE_NAME }}" ]; then
+              echo "❌ KCR_IMAGE_NAME이 비어있습니다!"
+              exit 1
+          fi
+          
           docker build -t ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG .
           docker push ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG
           docker tag ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_IMAGE_NAME }}:latest
