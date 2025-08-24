@@ -44,7 +44,7 @@ jobs:
 
       - name: Login to Kakao Cloud Registry
         run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login "${REGISTRY}" -u "${{ secrets.KCR_USER }}" --password-stdin
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
         run: |
@@ -77,12 +77,12 @@ jobs:
           fi
           
           echo "✅ Registry and image name validation passed"
-          echo "FULL_IMAGE_NAME: $REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+          echo "FULL_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
           
-          docker build -t "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" .
-          docker push "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
-          docker tag  "$REGISTRY/$IMAGE_NAME:$IMAGE_TAG" "$REGISTRY/$IMAGE_NAME:latest"
-          docker push "$REGISTRY/$IMAGE_NAME:latest"
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Set up SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -104,8 +104,8 @@ jobs:
             "echo '${{ secrets.KCR_PASSWORD }}' | docker login '${{ secrets.KCR_REGISTRY_URL }}' -u '${{ secrets.KCR_USER }}' --password-stdin && \
              docker stop scratcha_frontend || true && \
              docker rm scratcha_frontend || true && \
-             docker pull '${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:$IMAGE_TAG' && \
-             docker run -d --name scratcha_frontend -p 80:80 '${{ secrets.KCR_REGISTRY_URL }}/${{ secrets.KCR_FRONTEND_DEV_IMAGE_NAME }}:$IMAGE_TAG'" 2>&1
+             docker pull '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}' && \
+             docker run -d --name scratcha_frontend -p 80:80 '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'" 2>&1
 
   # main 브랜치용 ArgoCD 배포 잡 (기존과 동일)
   build-and-deploy:
@@ -143,7 +143,7 @@ jobs:
 
       - name: Login to Kakao Cloud Registry
         run: |
-          echo "${{ secrets.KCR_PASSWORD }}" | docker login "${KCR_REGISTRY_URL}" -u "${{ secrets.KCR_USER }}" --password-stdin
+          echo "${{ secrets.KCR_PASSWORD }}" | docker login ${{ secrets.KCR_REGISTRY_URL }} -u "${{ secrets.KCR_USER }}" --password-stdin
 
       - name: Build & Push Docker Image
         run: |
@@ -177,12 +177,12 @@ jobs:
 
           echo "✅ Secrets mapped to env detected"
           echo "Registry and image name validation passed"
-          echo "FULL_IMAGE_NAME: ${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
+          echo "FULL_IMAGE_NAME: ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG"
 
-          docker build -t "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" .
-          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}"
-          docker tag  "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:${IMAGE_TAG}" "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
-          docker push "${KCR_REGISTRY_URL}/${KCR_IMAGE_NAME}:latest"
+          docker build -t ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG .
+          docker push ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG
+          docker tag ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:$IMAGE_TAG ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:latest
+          docker push ${{ env.KCR_REGISTRY_URL }}/${{ env.KCR_IMAGE_NAME }}:latest
 
       - name: Checkout test Repo
         uses: actions/checkout@v4
